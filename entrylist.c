@@ -15,9 +15,6 @@ int init_entry_list(SHELL_ENTRY_LIST* list)
 
 int add_entry_list(SHELL_ENTRY_LIST* list, SHELL_ENTRY_LIST_ITEM* new)
 {
-	//if(list) return -1;
-	//if(new) return -1;
-
 	if(list->count == 0) {
 		list->first = new;
 		list->last = new;

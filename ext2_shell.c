@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <memory.h>
 #include "ext2_shell.h"
+
+
 typedef struct {
 	char * address;
 }DISK_MEMORY;
@@ -73,7 +75,7 @@ static SHELL_FILE_OPERATIONS g_file =
 	fs_write
 };
 
-static SHELL_FS_OPERATIONS   g_fsOprs =
+static SHELL_FS_OPERATIONS g_fsOprs =
 {
 	fs_ls,
 	fs_read_dir,
@@ -188,7 +190,7 @@ int	fs_df( DISK_OPERATIONS* disk, SHELL_FILESYSTEM* fs)
 	return EXT2_SUCCESS;
 }
 
-int fs_mv(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* parent, char* name, char* dir)
+int fs_mv(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* parent, const char* name, const char* dir)
 {
 	SHELL_ENTRY shell_dir;
 	EXT2_NODE entry;
@@ -340,7 +342,8 @@ int fs_lookup(DISK_OPERATIONS* disk, const SHELL_ENTRY* parent, SHELL_ENTRY* ent
 
 	shell_entry_to_ext2_entry(parent, &EXT2Parent);
 
-	if (result = ext2_lookup(&EXT2Parent, name, &EXT2Entry)) return result;
+	if ((result = ext2_lookup(&EXT2Parent, name, &EXT2Entry))) 
+		return result;
 
 	ext2_entry_to_shell_entry(EXT2Parent.fs, &EXT2Entry, entry);
 
@@ -411,7 +414,7 @@ int fs_mkdir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 	return EXT2_SUCCESS;
 }
 
-int fs_rmdir( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY *dir, char *name)
+int fs_rmdir( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENTRY *dir, const char *name)
 {
 	SHELL_ENTRY entry;
 	EXT2_NODE node;
@@ -455,7 +458,7 @@ int fs_rmdir( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY *d
 	
 }
 
-int fs_remove( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* dir, char* name )
+int fs_remove( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENTRY* dir, const char* name )
 {
 	SHELL_ENTRY entry;
 	EXT2_NODE ext2_entry;
@@ -584,8 +587,8 @@ int print_entry_long(SHELL_ENTRY_LIST* list)
 		get_inode(entry.fs->disk, &entry.fs->sb, entry.entry.inode, &inode);
 		print_per(item);
 		printf(" %3u %4x %4x %5u ", inode.links_count, inode.uid, inode.gid, inode.size);
-		memcpy(time, ctime(&inode.mtime), 25);
-		time[24] = NULL;
+		memcpy(time, ctime((time_t *)&inode.mtime), 25);
+		time[24] = '\0';
 		printf("%s ", time);
 		printf("%s \n", entry.entry.name);
 		item = item->next;

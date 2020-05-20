@@ -4,6 +4,7 @@ typedef struct
 } DISK_MEMORY;
 
 #include "ext2.h"
+
 #define MIN( a, b )					( ( a ) < ( b ) ? ( a ) : ( b ) )
 #define MAX( a, b )					( ( a ) > ( b ) ? ( a ) : ( b ) )
 
@@ -339,7 +340,6 @@ int ext2_format(DISK_OPERATIONS* disk)
 int block_write(DISK_OPERATIONS* disk, SECTOR group, SECTOR block, BYTE* data)  //'group'번째 그룹의 'block'번째 블록에 data의 내용을 write
 {
 	SECTOR sectorPerBlock = MAX_BLOCK_SIZE >> 9;
-	SECTOR sectorPerGroup = (NUMBER_OF_SECTORS - 2) / NUMBER_OF_GROUPS;
 	BYTE sector[MAX_SECTOR_SIZE];
 
 	for(int s_num = 0; s_num < sectorPerBlock; s_num++){
@@ -567,7 +567,7 @@ int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 	inode.blocks = 1;					
 	inode.block[0] = sb->first_data_block_each_group;  
 	inode.links_count = 2;
-	time(&inode.mtime);
+	time((time_t *)&inode.mtime);
 
 	set_inode(disk, sb, 2, &inode);
 	set_inode_bitmap(disk, 2, 1);
@@ -634,7 +634,7 @@ int set_inode(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK* sb, const UINT32 inode, I
 	return EXT2_SUCCESS;
 }
 
-int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry) //파일이름을 받아서 그파일을 만든다 한파일당 사이즈 block 1개 
+int ext2_create(EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEntry) //파일이름을 받아서 그파일을 만든다 한파일당 사이즈 block 1개 
 {
 	if ((parent->fs->gd.free_inodes_count) == 0) return EXT2_ERROR;
 
@@ -652,7 +652,7 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry) //파�
 	retEntry->entry.name_len = strlen((char *)name);
 	retEntry->fs = parent->fs;
 
-	if(ext2_lookup(parent,name,retEntry) == EXT2_SUCCESS) {
+	if(ext2_lookup(parent, (const char *)name, retEntry) == EXT2_SUCCESS) {
 		printf("%s file name already exists\n", entryName);
 		return EXT2_ERROR;		//lookup 에서 해당 파일이름의 엔트리가 parent에 존재하는 지 검사
 	}
@@ -671,7 +671,10 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry) //파�
 		new_block_num = alloc_free_block(parent->fs, g);		//새로운 block을 할당
            
 		if(new_block_num < 0) return EXT2_ERROR;
-		else if(new_block_num == 0) g = (++g)%NUMBER_OF_GROUPS;	//해당 group에 free block이 존재하지 않는 경우 
+		else if(new_block_num == 0) {
+			g++;
+			g = g % NUMBER_OF_GROUPS;	//해당 group에 free block이 존재하지 않는 경우
+		} 
 		else  {									//해당 group에서 free block을 찾은 경우 
 			g_num = g;
 		    break;
@@ -692,7 +695,7 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry) //파�
 	file_inode.block[0] = new_block_num;
 	file_inode.size = 0;
 	file_inode.links_count = 1;
-	time(&file_inode.mtime);
+	time((time_t *)&file_inode.mtime);
 	set_inode(parent->fs->disk,&parent->fs->sb,new_inode_num,&file_inode);
 	//get_inode(parent->fs->disk, &parent->fs->sb,retEntry->entry.inode, &file_inode);
 	retEntry->entry.inode = new_inode_num;
@@ -913,7 +916,7 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 	inode.block[0] = b_num;					
 	inode.size = 2 * sizeof(EXT2_DIR_ENTRY);
 	inode.links_count = 2;
-	time(&inode.mtime);
+	time((time_t *)&inode.mtime);
 
 	set_inode(parent->fs->disk, &parent->fs->sb, i_num, &inode);
 
@@ -982,7 +985,7 @@ int insert_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* parent, EXT2_DIR_ENTRY* e
 
 	get_data_block_at_inode(fs, &p_inode, parent->entry.inode, b_num);
 
-	if(p_inode.mode & 0x4000 == 0) return EXT2_ERROR;	//parent가 directory 파일인지 확인 
+	if((p_inode.mode & 0x4000) == 0) return EXT2_ERROR;	//parent가 directory 파일인지 확인 
 
 	entry_group = b_num[p_inode.blocks - 1] / fs->sb.block_per_group;
 	entry_block = b_num[p_inode.blocks - 1] % fs->sb.block_per_group;
@@ -998,7 +1001,8 @@ int insert_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* parent, EXT2_DIR_ENTRY* e
 				entry_group = g;
 				break;
 			}
-			g = (++g)%NUMBER_OF_GROUPS;
+			g++;
+			g = g % NUMBER_OF_GROUPS;
 		} while (g != entry_group);
 
 		if(entry_block == 0) {		//free block이 존재하지 않는 경우 
@@ -1012,7 +1016,7 @@ int insert_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* parent, EXT2_DIR_ENTRY* e
 
 	else {	
 		p_inode.size += sizeof(EXT2_DIR_ENTRY);
-		time(&p_inode.mtime);
+		time((time_t *)&p_inode.mtime);
 		set_inode(fs->disk, &fs->sb, parent->entry.inode, &p_inode);
 	}
 
@@ -1080,7 +1084,7 @@ UINT32 get_inode_block(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK* sb, UINT32 i_num
 		b_indirect = block[temp] % blockPerGroup;
 
 		ZeroMemory(block, sizeof(block));
-		block_read(disk, g_indirect, b_indirect, block);
+		block_read(disk, g_indirect, b_indirect, (unsigned char *)block);
 		temp = (b_num - 12 - indir_b_num)%indir_b_num;
 		return block[temp];
 	}
@@ -1131,7 +1135,7 @@ int set_inode_block(EXT2_FILESYSTEM* fs, UINT32 i_num, UINT32 b_num)
 	if(blocks < 12) {		//data block의 개수가 12개 미만인 경우 
 		inode.block[blocks] = b_num;
 		inode.blocks = inode.blocks + 1;
-		time(&inode.mtime);
+		time((time_t *)&inode.mtime);
 		if((inode.mode & 0x4000) != 0)
 			inode.size += sizeof(EXT2_DIR_ENTRY);
 
@@ -1148,7 +1152,10 @@ int set_inode_block(EXT2_FILESYSTEM* fs, UINT32 i_num, UINT32 b_num)
 				b_triple = alloc_free_block(fs, g_triple);
 
 				if(b_triple < 0) return EXT2_ERROR;
-				else if(b_triple == 0) g_triple = (++g_triple)%NUMBER_OF_GROUPS;
+				else if(b_triple == 0) {
+					g_triple++;
+					g_triple = g_triple % NUMBER_OF_GROUPS;
+				}
 				else break;
 
 			} while(g_triple != i_group);
@@ -1176,7 +1183,10 @@ int set_inode_block(EXT2_FILESYSTEM* fs, UINT32 i_num, UINT32 b_num)
 				b_double = alloc_free_block(fs, g_double);
 
 				if(b_double < 0) return EXT2_ERROR;
-				else if(b_double == 0) g_double = (++g_double)%NUMBER_OF_GROUPS;
+				else if(b_double == 0) {
+					g_double++;
+					g_double = g_double % NUMBER_OF_GROUPS;
+				}
 				else break;
 
 			} while(g_double != g_triple);
@@ -1223,7 +1233,10 @@ int set_inode_block(EXT2_FILESYSTEM* fs, UINT32 i_num, UINT32 b_num)
 				if(b_indirect < 0) {
 					return EXT2_ERROR;
 				}
-				else if(b_indirect == 0) g_indirect = (++g_indirect)%NUMBER_OF_GROUPS;
+				else if(b_indirect == 0) {
+					g_indirect++;
+					g_indirect = g_indirect % NUMBER_OF_GROUPS;
+				}
 				else break;
 			
 			} while(g_indirect != g_double);
@@ -1296,7 +1309,7 @@ int set_inode_block(EXT2_FILESYSTEM* fs, UINT32 i_num, UINT32 b_num)
 	}
 
 	inode.blocks = inode.blocks + 1;
-	time(&inode.mtime);
+	time((time_t *)&inode.mtime);
 	if((inode.mode & 0x4000) != 0)
 		inode.size += sizeof(EXT2_DIR_ENTRY);
 
@@ -1375,7 +1388,7 @@ UINT32 alloc_free_block(const EXT2_FILESYSTEM* fs, UINT32 group)
 	return b_num;
 }
 
-UINT32 alloc_free_inode(EXT2_FILESYSTEM* fs, EXT2_NODE* parent)
+UINT32 alloc_free_inode(EXT2_FILESYSTEM* fs, const EXT2_NODE* parent)
 {
 	EXT2_GROUP_DESCRIPTOR* gd;
 	BYTE block[MAX_BLOCK_SIZE];
@@ -1517,8 +1530,8 @@ int release_dir_entry(EXT2_FILESYSTEM* fs, EXT2_NODE* parent, EXT2_NODE* entry)
 
 	if(dir_p->inode == dir.inode) {						//삭제하려는 entry가 마지막 entry인 경우 읽어온 마지막 entry를 DIR_ENTRY_NO_MORE로 변경 후에 덮어씀
 		dir.name[0] = DIR_ENTRY_NO_MORE;
-		dir.inode = NULL;
-		dir.name_len = NULL;
+		dir.inode = 0;
+		dir.name_len = 0;
 	}
 	memcpy(dir_p, &dir, sizeof(EXT2_DIR_ENTRY));
 	block_write(fs->disk, entry->location.group, entry->location.block, block);
